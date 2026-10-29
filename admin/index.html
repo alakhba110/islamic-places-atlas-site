@@ -7,61 +7,91 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&family=Amiri:wght@400;700&display=swap">
 <style>
-/* Lead approval panel. Reads agent data from the private repo with the lead's own GitHub token
-   and writes only data/pilot/review/approvals.json. The page itself holds no project data. */
+/* Lead approval panel: a review queue, one item at a time. Reads agent data from the private repo
+   with the lead's own GitHub token and writes only data/pilot/review/approvals.json. */
 :root {
   --bg: #f6f3ec; --panel: #fffdf8; --ink: #1f2328; --muted: #6a6f76; --line: #e2ddd2;
-  --gold: #a87a22; --ok: #2f7d4a; --warn: #b4542c; --area: #3d6fb6;
+  --gold: #a87a22; --ok: #2f7d4a; --fix: #b4542c; --wait: #8a8f96; --area: #3d6fb6;
   --font-ui: "Vazirmatn", Tahoma, system-ui, sans-serif; --font-ar: "Amiri", "Traditional Arabic", serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0f141b; --panel: #151c25; --ink: #e9e3d6; --muted: #9aa6b2; --line: #2a3542;
-  --gold: #d9a84e; --ok: #8cc59a; --warn: #e0875a; --area: #5b8fd6; } }
+  --gold: #d9a84e; --ok: #6fbf86; --fix: #e0875a; --wait: #7d8894; --area: #5b8fd6; } }
+:root[data-theme="dark"] { --bg: #0f141b; --panel: #151c25; --ink: #e9e3d6; --muted: #9aa6b2; --line: #2a3542;
+  --gold: #d9a84e; --ok: #6fbf86; --fix: #e0875a; --wait: #7d8894; --area: #5b8fd6; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.7 var(--font-ui); }
-header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
-  padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 3; }
-h1 { margin: 0; font-size: 18px; }
-h2 { margin: 0 0 6px; font-size: 16px; }
-h3 { margin: 14px 0 6px; font-size: 13px; color: var(--gold); font-weight: 500; }
-button, input, select { font: inherit; }
-button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
-button.primary { background: var(--gold); color: #fff; border-color: var(--gold); }
-button:disabled { opacity: .5; cursor: default; }
-input[type=password], input[type=text], select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 4px 8px; }
-.muted { color: var(--muted); font-size: 12px; }
-main { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: calc(100vh - 60px); }
-nav { border-left: 1px solid var(--line); overflow-y: auto; max-height: calc(100vh - 60px); position: sticky; top: 60px; }
-nav button { display: grid; grid-template-columns: 1fr auto; width: 100%; text-align: right; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 8px 12px; background: none; }
-nav button[aria-current="true"] { background: color-mix(in srgb, var(--gold) 15%, transparent); }
-.pill { font-size: 11px; border-radius: 10px; padding: 0 8px; border: 1px solid currentColor; white-space: nowrap; }
-.pill.ok { color: var(--ok); } .pill.wait { color: var(--warn); }
-#view { padding: 16px; max-width: 900px; min-width: 0; overflow-wrap: anywhere; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
-.row { display: flex; gap: 10px; align-items: flex-start; }
-.row label.chk { display: flex; gap: 6px; align-items: center; white-space: nowrap; font-weight: 500; }
-.row label.chk input { width: 18px; height: 18px; accent-color: var(--ok); }
-.grow { flex: 1; min-width: 0; }
-.ar { font-family: var(--font-ar); font-size: 17px; line-height: 1.9; }
-.kv { display: grid; grid-template-columns: 130px 1fr; gap: 2px 10px; font-size: 13px; }
-.kv dt { color: var(--muted); } .kv dd { margin: 0; }
-#map { height: 260px; border-radius: 8px; border: 1px solid var(--line); margin-top: 8px; }
-.note { width: 100%; margin-top: 6px; }
-.res-point { color: var(--ok); } .res-area { color: var(--area); } .res-approximate { color: var(--warn); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.75 var(--font-ui); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+button:disabled { opacity: .45; cursor: default; }
+kbd { font: 11px var(--font-ui); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; opacity: .7; margin-inline-start: 6px; }
+.muted { color: var(--muted); font-size: 13px; }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+.top { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+h1 { margin: 0; font-size: 17px; }
+.bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); margin: 8px 0 4px; }
+.bar i { display: block; } .bar .ok { background: var(--ok); } .bar .fix { background: var(--fix); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-inline-end: 5px; vertical-align: middle; }
+.dot.ok { background: var(--ok); } .dot.fix { background: var(--fix); } .dot.wait { background: var(--wait); }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 4px 12px; background: none; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--gold); color: #fff; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; max-width: 1240px; margin: 0 auto; padding: 16px; }
+#queue { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-y: auto; max-height: calc(100vh - 170px); position: sticky; top: 150px; }
+#queue button { display: flex; gap: 8px; align-items: baseline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; text-align: right; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; padding: 7px 12px; font-size: 13px; }
+#queue button.cur { background: color-mix(in srgb, var(--gold) 16%, transparent); }
+#queue .grp { padding: 8px 12px 2px; font-size: 12px; color: var(--gold); font-weight: 700; border-bottom: 1px solid var(--line); }
+#queue .ind { padding-inline-start: 26px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+.crumbs { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.kind { display: inline-block; font-size: 12px; border-radius: 10px; padding: 0 10px; background: color-mix(in srgb, var(--gold) 18%, transparent); color: var(--gold); margin-bottom: 6px; }
+h2 { margin: 0 0 8px; font-size: 21px; line-height: 1.5; }
+.ar { font-family: var(--font-ar); font-size: 21px; line-height: 2; background: var(--bg); border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+.tr { font-size: 15px; border-inline-start: 3px solid var(--gold); padding-inline-start: 12px; margin: 10px 0; }
+.kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 3px 12px; font-size: 14px; margin: 10px 0; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; }
+.disp { background: color-mix(in srgb, var(--fix) 10%, transparent); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+#map { height: 300px; border-radius: 10px; border: 1px solid var(--line); margin-top: 10px; }
+.state { margin-top: 14px; font-size: 14px; }
+.state.ok { color: var(--ok); } .state.fix { color: var(--fix); }
+.actions { position: sticky; bottom: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 12px; box-shadow: 0 -4px 14px rgb(0 0 0 / .06); }
+.actions .approve { background: var(--ok); border-color: var(--ok); color: #fff; font-weight: 700; padding: 8px 22px; }
+.actions .fixbtn { border-color: var(--fix); color: var(--fix); font-weight: 700; padding: 8px 18px; }
+.actions .sp { flex: 1; }
+#fixbox { display: none; width: 100%; } #fixbox.open { display: flex; gap: 8px; flex-wrap: wrap; }
+#fixbox textarea { flex: 1; min-width: 200px; min-height: 64px; border: 1px solid var(--fix); border-radius: 8px; background: var(--bg); padding: 6px 10px; }
 #login { max-width: 560px; margin: 40px auto; }
-@media (max-width: 760px) { main { grid-template-columns: minmax(0, 1fr); } nav { position: static; max-height: 40vh; border-left: 0; border-bottom: 1px solid var(--line); } }
+#login input { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; }
+.done { text-align: center; padding: 40px 10px; }
+#listToggle { display: none; }
+@media (max-width: 860px) {
+  main { grid-template-columns: minmax(0, 1fr); padding: 10px; }
+  #queue { position: static; max-height: 50vh; display: none; order: -1; } #queue.open { display: block; }
+  #listToggle { display: inline-block; }
+  .kv { grid-template-columns: 96px minmax(0, 1fr); }
+  kbd { display: none; }
+}
 </style>
 </head>
 <body>
 <header>
-  <div><h1>پنل تأیید رهبر</h1><div class="muted" id="meta">اطلس اماکن تاریخ اسلام</div></div>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <select id="filter" aria-label="فیلتر">
-      <option value="all">همه‌ی اماکن</option><option value="wait">فقط منتظر تأیید</option><option value="ok">فقط تأییدشده</option>
-    </select>
-    <span class="muted" id="dirty"></span>
-    <button class="primary" id="save" disabled>ذخیره در گیت‌هاب</button>
-    <button id="logout">خروج</button>
+  <div class="top">
+    <h1>پنل تأیید رهبر</h1>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span class="muted" id="save"></span>
+      <button id="listToggle">فهرست</button>
+      <button id="logout">خروج</button>
+    </div>
+  </div>
+  <div id="prog" hidden>
+    <div class="bar"><i class="ok" id="bOk"></i><i class="fix" id="bFix"></i></div>
+    <div class="legend"><span><span class="dot ok"></span><b id="nOk"></b> تأیید</span><span><span class="dot fix"></span><b id="nFix"></b> نیاز به اصلاح</span><span><span class="dot wait"></span><b id="nWait"></b> منتظر</span><span class="muted" id="meta"></span></div>
+    <div class="filters">
+      <div class="seg" id="fKind"><button data-v="all" aria-pressed="true">همه</button><button data-v="place">موقعیت مکان</button><button data-v="event">رویداد</button><button data-v="narration">روایت</button></div>
+      <div class="seg" id="fState"><button data-v="wait" aria-pressed="true">منتظر</button><button data-v="fix">نیاز به اصلاح</button><button data-v="ok">تأییدشده</button><button data-v="all">همه</button></div>
+    </div>
   </div>
 </header>
 
@@ -69,17 +99,17 @@ nav button[aria-current="true"] { background: color-mix(in srgb, var(--gold) 15%
   <h2>ورود</h2>
   <p>این صفحه داده‌ای در خود ندارد. داده را مستقیم از مخزن خصوصی با توکن خودتان می‌خواند و فقط فایل <code>data/pilot/review/approvals.json</code> را می‌نویسد.</p>
   <p class="muted">یک fine-grained token بسازید (GitHub ← Settings ← Developer settings ← Fine-grained tokens) فقط برای مخزن <code>islamic-places-atlas</code> با دسترسی <b>Contents: Read and write</b>. توکن فقط در مرورگر خودتان ذخیره می‌شود.</p>
-  <div class="row" style="flex-wrap:wrap">
-    <input type="password" id="token" class="grow" placeholder="github_pat_…" autocomplete="off">
-    <input type="text" id="branch" value="claude/pipeline" size="16" aria-label="شاخه">
-    <button class="primary" id="go">ورود</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <input type="password" id="token" style="flex:1;min-width:220px" placeholder="github_pat_…" autocomplete="off">
+    <input type="text" id="branch" value="claude/pipeline" size="15" aria-label="شاخه">
+    <button id="go" style="background:var(--gold);color:#fff;border-color:var(--gold)">ورود</button>
   </div>
   <p class="muted" id="err"></p>
 </section>
 
 <main id="app" hidden>
-  <nav id="list"></nav>
-  <div id="view"><p class="muted">یک مکان را انتخاب کنید.</p></div>
+  <div><div id="view"></div></div>
+  <nav id="queue" aria-label="صف بازبینی"></nav>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
@@ -87,12 +117,15 @@ nav button[aria-current="true"] { background: color-mix(in srgb, var(--gold) 15%
 const REPO = "alakhba110/islamic-places-atlas";
 const APPROVALS = "data/pilot/review/approvals.json";
 const RES_FA = { point: "نقطه (جای مشخص)", area: "ناحیه (محدوده‌ی کلی)", approximate: "احتمالی (حدود تخمینی)" };
+const KIND_FA = { place: "موقعیت مکان", event: "رویداد", narration: "روایت" };
+const fa = n => Number(n).toLocaleString("fa-IR");
 const $ = id => document.getElementById(id);
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
 
 let token = store.get("gh_token"), branch = store.get("gh_branch") || "claude/pipeline";
-let data, approvals = {}, approvalsSha = null, dirty = new Set(), current = null, map = null;
+let data, approvals = {}, items = [], pos = 0, fKind = "all", fState = "wait", map = null;
+let dirty = new Set(), saveTimer = null, saving = false;
 
 async function gh(path, opts = {}) {
   const r = await fetch(`https://api.github.com/repos/${REPO}/${path}`, { ...opts,
@@ -102,7 +135,7 @@ async function gh(path, opts = {}) {
 }
 const ref = () => `ref=${encodeURIComponent(branch)}`;
 const decode = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), c => c.charCodeAt(0)));
-const encode = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+const encode = s => { const b = new TextEncoder().encode(s); let out = ""; for (let i = 0; i < b.length; i += 0x8000) out += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(out); };
 async function readJson(path) {
   const f = await gh(`contents/${path}?${ref()}`);
   if (!f) return null;
@@ -115,10 +148,10 @@ async function readJson(path) {
 async function loadData() {
   const merged = await readJson("data/pilot/merged.json");
   if (merged) return { ...merged.json, _from: "merged.json" };
-  const dir = await gh(`contents/data/pilot/raw?${ref()}`) || [];
-  const out = { places: [], events: [], sources: [], _from: "raw/ (" + dir.filter(f => f.name.endsWith(".json")).length + " فایل)" };
+  const dir = (await gh(`contents/data/pilot/raw?${ref()}`) || []).filter(f => f.name.endsWith(".json"));
+  const out = { places: [], events: [], sources: [], _from: `raw/ (${fa(dir.length)} فایل)` };
   const seen = { places: new Set(), sources: new Set(), events: new Set() };
-  for (const f of dir.filter(f => f.name.endsWith(".json"))) {
+  for (const f of dir) {
     const j = (await readJson(f.path)).json;
     for (const k of ["places", "events", "sources"])
       for (const x of j[k] || []) if (!seen[k].has(x.id)) { seen[k].add(x.id); out[k].push({ ...x, _file: f.name }); }
@@ -126,99 +159,157 @@ async function loadData() {
   return out;
 }
 
-// Approval keys: place-location:<place id>, event:<event id>, narration:<narration id>
-// (narrations without an id fall back to <event id>#<index>).
-const narrKey = (ev, n, i) => "narration:" + (n.id || `${ev.id}#${i}`);
-function itemsOf(p) {
-  const keys = ["place-location:" + p.id];
-  for (const ev of data.events.filter(e => (e.place_ids || []).includes(p.id))) {
-    keys.push("event:" + ev.id);
-    (ev.narrations || []).forEach((n, i) => keys.push(narrKey(ev, n, i)));
-  }
-  return keys;
-}
-const isOk = k => approvals[k]?.approved === true;
-
-function renderList() {
-  const f = $("filter").value, nav = $("list");
-  nav.innerHTML = "";
+// Queue: each place, then the events whose first place it is, each followed by its narrations.
+// Keys: place-location:<id>, event:<id>, narration:<id>. A narration without an id cannot be approved yet:
+// a fallback key would be orphaned once the agent adds ids, and agents may not edit approvals.json.
+function buildItems() {
+  items = [];
+  const placeOf = ev => (ev.place_ids || [])[0];
   for (const p of data.places) {
-    const keys = itemsOf(p), done = keys.filter(isOk).length, all = done === keys.length;
-    if ((f === "ok" && !all) || (f === "wait" && all)) continue;
-    const b = document.createElement("button");
-    b.innerHTML = `<span></span><span class="pill ${all ? "ok" : "wait"}">${done.toLocaleString("fa-IR")}/${keys.length.toLocaleString("fa-IR")}</span>`;
-    b.firstChild.textContent = p.name_fa || p.id;
-    if (current === p.id) b.setAttribute("aria-current", "true");
-    b.onclick = () => { current = p.id; renderList(); renderPlace(p); };
-    nav.appendChild(b);
+    items.push({ kind: "place", key: "place-location:" + p.id, place: p });
+    for (const ev of data.events.filter(e => placeOf(e) === p.id)) {
+      items.push({ kind: "event", key: "event:" + ev.id, place: p, ev });
+      (ev.narrations || []).forEach((n, i) => items.push({ kind: "narration", key: n.id ? "narration:" + n.id : null, place: p, ev, n, i }));
+    }
   }
-  if (!nav.children.length) nav.innerHTML = `<p class="muted" style="padding:12px">موردی نیست.</p>`;
+}
+const stateOf = it => { const a = it.key && approvals[it.key]; return a?.approved === true ? "ok" : a?.note ? "fix" : "wait"; };
+const visible = it => (fKind === "all" || it.kind === fKind) && (fState === "all" || stateOf(it) === fState);
+const titleOf = it => it.kind === "place" ? (it.place.name_fa || it.place.id)
+  : it.kind === "event" ? (it.ev.title_fa || it.ev.id)
+  : `${srcName(it.n)} · ${it.n.locator || ""}`;
+const srcName = n => { const s = data.sources.find(s => s.id === n.source_id); return s?.title_fa || s?.title_ar || n.source_id; };
+
+function renderProgress() {
+  const keyed = items.filter(it => it.key), c = { ok: 0, fix: 0, wait: 0 };
+  keyed.forEach(it => c[stateOf(it)]++);
+  const pct = n => keyed.length ? (n / keyed.length * 100) + "%" : "0";
+  $("bOk").style.width = pct(c.ok); $("bFix").style.width = pct(c.fix);
+  $("nOk").textContent = fa(c.ok); $("nFix").textContent = fa(c.fix); $("nWait").textContent = fa(c.wait);
+  const noId = items.length - keyed.length;
+  $("meta").textContent = `· منبع: ${data._from}` + (noId ? ` · ${fa(noId)} روایت هنوز شناسه ندارد` : "");
 }
 
-function approvalRow(key, label) {
-  const a = approvals[key] || {};
-  const row = document.createElement("div");
-  row.innerHTML = `<label class="chk"><input type="checkbox"> <span></span></label>
-    <input type="text" class="note" placeholder="یادداشت یا اصلاح برای ایجنت (اختیاری)">`;
-  const [box, note] = row.querySelectorAll("input");
-  row.querySelector("span").textContent = label;
-  box.checked = a.approved === true; note.value = a.note || "";
-  const upd = () => {
-    approvals[key] = { approved: box.checked, note: note.value.trim(), by: "lead", at: new Date().toISOString().slice(0, 10) };
-    dirty.add(key); syncDirty(); renderList();
-  };
-  box.onchange = upd; note.onchange = upd;
-  return row;
+function renderQueue() {
+  const q = $("queue"); q.innerHTML = "";
+  let lastPlace = null, n = 0;
+  items.forEach((it, idx) => {
+    if (!visible(it)) return;
+    n++;
+    if (it.place !== lastPlace) { lastPlace = it.place; q.append(el(`<div class="grp"></div>`, it.place.name_fa || it.place.id)); }
+    const b = el(`<button class="${it.kind === "narration" ? "ind" : ""}${idx === pos ? " cur" : ""}"><span class="dot ${stateOf(it)}"></span><span></span></button>`);
+    b.lastChild.textContent = (it.kind === "place" ? "موقعیت" : it.kind === "event" ? "◆ " + titleOf(it) : "روایت: " + srcName(it.n).split(/[،(]/)[0].trim());
+    b.title = titleOf(it);
+    b.onclick = () => { go(idx); $("queue").classList.remove("open"); };
+    q.append(b);
+  });
+  if (!n) q.append(el(`<p class="muted" style="padding:12px"></p>`, "در این فیلتر موردی نیست."));
+  q.querySelector(".cur")?.scrollIntoView({ block: "nearest" });
 }
 
-function el(html, text) { const d = document.createElement("div"); d.innerHTML = html; if (text != null) d.firstElementChild.textContent = text; return d.firstElementChild; }
+function el(html, text) { const d = document.createElement("div"); d.innerHTML = html.trim(); const e = d.firstElementChild; if (text != null) e.textContent = text; return e; }
+function kv(rows) {
+  const dl = document.createElement("dl"); dl.className = "kv";
+  for (const [k, v] of rows) if (v != null && v !== "") dl.append(el("<dt></dt>", k), el("<dd></dd>", String(v)));
+  return dl;
+}
+const hdate = d => d ? [d.year, d.month, d.day].filter(x => x != null).map(fa).join("/") + (d.year ? "ق" : "") + (d.approx ? " (تقریبی)" : "") : "";
 
-function renderPlace(p) {
+function renderItem() {
   const v = $("view"); v.innerHTML = "";
-  const res = p.resolution || "point";
-  const head = el(`<div class="card"></div>`);
-  head.innerHTML = `<h2></h2><div class="ar"></div><dl class="kv"></dl><div id="map"></div><h3>تأیید موقعیت</h3>`;
-  head.querySelector("h2").textContent = `${p.name_fa || ""} · ${p.id}`;
-  head.querySelector(".ar").textContent = p.name_ar || "";
-  const kv = head.querySelector("dl");
-  const add = (k, val, cls) => { if (val == null || val === "") return; kv.append(el("<dt></dt>", k), el(`<dd class="${cls || ""}"></dd>`, String(val))); };
-  add("رزولوشن", RES_FA[res] || res + (p.resolution ? "" : " (تعیین نشده)"), "res-" + res);
-  add("مختصات", p.coords ? `${p.coords.lat}, ${p.coords.lon}` : "ندارد");
-  if (p.area) add("محدوده", p.area.radius_km ? `دایره به شعاع ${p.area.radius_km} کیلومتر` : "چندضلعی");
-  add("اطمینان", p.coord_certainty); add("مبنا", p.coord_basis);
-  add("نام امروزی", p.name_modern); add("وضعیت امروز", p.present_status);
-  (p.alt_locations || []).forEach((a, i) => add(`جای جایگزین ${i + 1}`, `${a.lat}, ${a.lon} — ${a.note || ""}`));
-  add("فایل", p._file);
-  head.appendChild(approvalRow("place-location:" + p.id, "موقعیت و رزولوشن این مکان را تأیید می‌کنم"));
-  v.appendChild(head);
-  drawMap(p);
-
-  const evs = data.events.filter(e => (e.place_ids || []).includes(p.id));
-  if (!evs.length) v.appendChild(el(`<p class="muted"></p>`, "رویدادی به این مکان وصل نشده است."));
-  for (const ev of evs) {
-    const c = el(`<div class="card"></div>`);
-    const d = ev.date_hijri || {};
-    c.append(el("<h2></h2>", ev.title_fa || ev.id),
-      el(`<div class="muted"></div>`, [d.day, d.month, d.year].filter(x => x != null).join("/") + (d.year ? "ق" : "") + (d.approx ? " (تقریبی)" : "") + " · " + (ev.categories || []).join("، ")),
-      el("<p></p>", ev.summary_fa || ""));
-    if (ev.disputes_fa) c.append(el(`<p class="muted"></p>`, "اختلاف‌ها: " + ev.disputes_fa));
-    c.appendChild(approvalRow("event:" + ev.id, "خلاصه‌ی این رویداد را تأیید می‌کنم"));
-    (ev.narrations || []).forEach((n, i) => {
-      const src = data.sources.find(s => s.id === n.source_id);
-      const box = el(`<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px"></div>`);
-      const h = el("<h3></h3>", `روایت ${(i + 1).toLocaleString("fa-IR")} · ${src?.title_fa || src?.title_ar || n.source_id} · ${n.locator || ""} · درجه ${n.tier} · ${n.perspective || ""}${n.verified ? " · راستی‌آزمایی شده" : ""}`);
-      box.append(h);
-      if (n.text_ar) box.append(el(`<div class="ar"></div>`, n.text_ar));
-      if (n.translation_fa) box.append(el("<p></p>", n.translation_fa));
-      if (n.url) { const a = el(`<a target="_blank" rel="noopener"></a>`, n.url); a.href = n.url; box.append(a); }
-      // A fallback key would orphan the approval once the agent adds narration ids, so wait for the id.
-      box.appendChild(n.id ? approvalRow(narrKey(ev, n, i), "این روایت و ترجمه‌اش را تأیید می‌کنم")
-        : el(`<p class="muted"></p>`, "این روایت هنوز شناسه ندارد. پس از افزودن شناسه توسط ایجنت قابل تأیید می‌شود."));
-      c.appendChild(box);
-    });
-    v.appendChild(c);
+  if (map) { map.remove(); map = null; }
+  const it = items[pos];
+  if (!it || !visible(it)) {
+    const d = el(`<div class="card done"></div>`);
+    d.append(el("<h2></h2>", fState === "wait" ? "موردی منتظر بازبینی نیست ✓" : "موردی نیست"),
+      el(`<p class="muted"></p>`, "فیلتر را عوض کنید یا منتظر داده‌ی تازه‌ی ایجنت‌ها بمانید."));
+    v.append(d); return;
   }
+  const c = el(`<div class="card"></div>`);
+  const crumbs = [it.place.name_fa || it.place.id]; if (it.kind === "narration") crumbs.push(it.ev.title_fa || it.ev.id);
+  c.append(el(`<div class="crumbs"></div>`, it.kind === "place" ? it.place.id : crumbs.join(" › ")), el(`<span class="kind"></span>`, KIND_FA[it.kind]));
+
+  if (it.kind === "place") {
+    const p = it.place, res = p.resolution || "point";
+    c.append(el("<h2></h2>", p.name_fa || p.id));
+    if (p.name_ar) c.append(el(`<div class="ar"></div>`, p.name_ar));
+    c.append(kv([["رزولوشن", (RES_FA[res] || res) + (p.resolution ? "" : " (هنوز تعیین نشده)")],
+      ["مختصات", p.coords ? `${p.coords.lat}, ${p.coords.lon}` : "ندارد"],
+      ["محدوده", p.area ? (p.area.radius_km ? `دایره به شعاع ${fa(p.area.radius_km)} کیلومتر` : "چندضلعی") : ""],
+      ["شعاع عدم قطعیت", p.uncertainty_radius_km ? `${fa(p.uncertainty_radius_km)} کیلومتر` : ""],
+      ["اطمینان", p.coord_certainty], ["مبنای مختصات", p.coord_basis],
+      ["نام امروزی", p.name_modern], ["وضعیت امروز", p.present_status],
+      ...(p.alt_locations || []).map((a, i) => [`جای جایگزین ${fa(i + 1)}`, `${a.lat}, ${a.lon} — ${a.note || ""}`])]));
+    c.append(el(`<div id="map"></div>`));
+  } else if (it.kind === "event") {
+    const ev = it.ev;
+    c.append(el("<h2></h2>", ev.title_fa || ev.id));
+    c.append(kv([["تاریخ", hdate(ev.date_hijri)], ["دسته", (ev.categories || []).join("، ")], ["روایت‌ها", fa((ev.narrations || []).length)]]));
+    if (ev.summary_fa) c.append(el(`<p></p>`, ev.summary_fa));
+    if (ev.disputes_fa) c.append(el(`<div class="disp"></div>`, "اختلاف منابع: " + ev.disputes_fa));
+  } else {
+    const n = it.n;
+    c.append(el("<h2></h2>", srcName(n)));
+    c.append(kv([["رویداد", it.ev.title_fa || it.ev.id], ["نشانی در منبع", n.locator], ["درجه", n.tier], ["دیدگاه منبع", n.perspective],
+      ["راستی‌آزمایی ماشینی", n.verified ? "انجام شده" : "هنوز نه"], ["شناسه", n.id || "ندارد"]]));
+    if (n.text_ar) c.append(el(`<div class="ar"></div>`, n.text_ar));
+    if (n.translation_fa) c.append(el(`<div class="tr"></div>`, n.translation_fa));
+    if (n.url) { const a = el(`<a target="_blank" rel="noopener" style="font-size:13px;overflow-wrap:anywhere"></a>`, n.url); a.href = n.url; c.append(a); }
+  }
+  const a = it.key && approvals[it.key], st = stateOf(it);
+  if (st !== "wait") c.append(el(`<div class="state ${st}"></div>`, (st === "ok" ? "✓ تأیید شده" : "✎ اصلاح خواسته شده: " + a.note) + (a.at ? ` (${a.at})` : "")));
+  v.append(c);
+
+  const bar = el(`<div class="actions"></div>`);
+  if (!it.key) {
+    bar.append(el(`<span class="muted"></span>`, "این روایت هنوز شناسه ندارد و پس از افزودن شناسه توسط ایجنت قابل تأیید می‌شود."), el(`<span class="sp"></span>`));
+  } else {
+    const ok = el(`<button class="approve">✓ تأیید<kbd>A</kbd></button>`); ok.onclick = () => decide(true);
+    const fx = el(`<button class="fixbtn">✎ نیاز به اصلاح<kbd>R</kbd></button>`); fx.onclick = openFix;
+    bar.append(ok, fx);
+    if (it.kind === "event" && (it.ev.narrations || []).some(n => n.id)) {
+      const all = el(`<button>تأیید رویداد و همه‌ی روایت‌هایش</button>`); all.onclick = approveEventAll; bar.append(all);
+    }
+    bar.append(el(`<span class="sp"></span>`));
+  }
+  const prev = el(`<button>قبلی<kbd>→</kbd></button>`); prev.onclick = () => step(-1);
+  const next = el(`<button>بعدی<kbd>←</kbd></button>`); next.onclick = () => step(1);
+  bar.append(prev, next);
+  const fb = el(`<div id="fixbox"><textarea placeholder="چه چیزی باید اصلاح شود؟ ایجنت این را اعمال و گزارش می‌کند."></textarea><button class="fixbtn">ثبت اصلاح<kbd>Ctrl+Enter</kbd></button></div>`);
+  fb.querySelector("textarea").value = a?.note || "";
+  fb.querySelector("button").onclick = () => { const t = fb.querySelector("textarea").value.trim(); if (t) decide(false, t); };
+  bar.append(fb);
+  v.append(bar);
+  if (it.kind === "place") drawMap(it.place);
 }
+
+function openFix() { const f = $("fixbox"); if (!f) return; f.classList.add("open"); f.querySelector("textarea").focus(); }
+function setApproval(key, approved, note = "") {
+  approvals[key] = { approved, note, by: "lead", at: new Date().toISOString().slice(0, 10) };
+  dirty.add(key);
+}
+function decide(approved, note = "") {
+  const it = items[pos]; if (!it?.key) return;
+  setApproval(it.key, approved, note);
+  afterDecision();
+}
+function approveEventAll() {
+  const it = items[pos];
+  setApproval(it.key, true);
+  for (const n of it.ev.narrations || []) if (n.id) setApproval("narration:" + n.id, true);
+  afterDecision();
+}
+function afterDecision() {
+  scheduleSave(); renderProgress();
+  // Move to the next item still visible under the current filter (skipping the one just decided if it left the filter).
+  const nxt = items.findIndex((x, i) => i > pos && visible(x));
+  if (nxt >= 0) pos = nxt; else if (!visible(items[pos])) pos = items.findIndex(visible);
+  renderQueue(); renderItem();
+}
+function step(d) {
+  for (let i = pos + d; i >= 0 && i < items.length; i += d) if (visible(items[i])) { go(i); return; }
+}
+function go(i) { pos = i; store.set("gh_pos", items[i]?.key || ""); renderQueue(); renderItem(); scrollTo({ top: 0 }); }
 
 // Point = dot; area = circle (radius_km) or polygon; approximate = dot with its uncertainty radius.
 function circle([lon, lat], km) {
@@ -228,7 +319,6 @@ function circle([lon, lat], km) {
   return { type: "Polygon", coordinates: [pts] };
 }
 function drawMap(p) {
-  if (map) { map.remove(); map = null; }
   if (!p.coords || !window.maplibregl) return;
   const c = [p.coords.lon, p.coords.lat], feats = [];
   if (p.area?.polygon) feats.push({ type: "Feature", geometry: { type: "Polygon", coordinates: [p.area.polygon] } });
@@ -242,51 +332,69 @@ function drawMap(p) {
     map.addSource("p", { type: "geojson", data: { type: "FeatureCollection", features: feats } });
     map.addLayer({ id: "fill", type: "fill", source: "p", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#3d6fb6", "fill-opacity": 0.2 } });
     map.addLayer({ id: "edge", type: "line", source: "p", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#3d6fb6", "line-width": 2, "line-dasharray": [2, 1] } });
-    map.addLayer({ id: "dot", type: "circle", source: "p", filter: ["==", "$type", "Point"], paint: { "circle-radius": 6, "circle-color": "#a87a22", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
+    map.addLayer({ id: "dot", type: "circle", source: "p", filter: ["==", "$type", "Point"], paint: { "circle-radius": 7, "circle-color": "#a87a22", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
   });
 }
 
-function syncDirty() {
-  $("dirty").textContent = dirty.size ? `${dirty.size.toLocaleString("fa-IR")} تغییر ذخیره‌نشده` : "";
-  $("save").disabled = !dirty.size;
-}
-
-$("save").onclick = async () => {
-  $("save").disabled = true; $("dirty").textContent = "در حال ذخیره…";
+// Auto-save shortly after each decision. Re-read first so another tab's or device's edits are kept.
+function scheduleSave() { $("save").textContent = "ذخیره‌نشده…"; clearTimeout(saveTimer); saveTimer = setTimeout(save, 1200); }
+async function save() {
+  if (saving) { scheduleSave(); return; }
+  if (!dirty.size) return;
+  saving = true; const batch = [...dirty]; dirty.clear(); $("save").textContent = "در حال ذخیره…";
   try {
-    // Re-read first so agents' or another tab's edits to approvals.json are not overwritten.
     const latest = await readJson(APPROVALS);
     const merged = { ...(latest?.json || {}) };
-    for (const k of dirty) merged[k] = approvals[k];
-    const body = { message: `Lead approvals: ${dirty.size} item(s) updated via admin panel`, branch,
-      content: encode(JSON.stringify(merged, null, 2) + "\n") };
+    for (const k of batch) merged[k] = approvals[k];
+    const body = { message: `Lead approvals: ${batch.length} item(s) via admin panel`, branch, content: encode(JSON.stringify(merged, null, 2) + "\n") };
     if (latest) body.sha = latest.sha;
     await gh(`contents/${APPROVALS}`, { method: "PUT", body: JSON.stringify(body) });
-    approvals = merged; dirty.clear(); syncDirty(); $("dirty").textContent = "ذخیره شد ✓";
-  } catch (e) { $("dirty").textContent = "خطا در ذخیره: " + e.message; $("save").disabled = false; }
-};
+    approvals = { ...merged, ...Object.fromEntries([...dirty].map(k => [k, approvals[k]])) };
+    $("save").textContent = dirty.size ? "ذخیره‌نشده…" : "ذخیره شد ✓";
+  } catch (e) {
+    batch.forEach(k => dirty.add(k)); $("save").textContent = "خطا در ذخیره: " + e.message + " — دوباره تلاش می‌شود";
+    saveTimer = setTimeout(save, 8000);
+  } finally { saving = false; }
+}
+
+function seg(id, set) {
+  $(id).onclick = e => { const b = e.target.closest("button"); if (!b) return;
+    $(id).querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    set(b.dataset.v); if (!visible(items[pos])) pos = Math.max(0, items.findIndex(visible)); renderQueue(); renderItem(); };
+}
+seg("fKind", v => fKind = v); seg("fState", v => fState = v);
 
 async function start() {
-  $("login").hidden = true; $("app").hidden = false;
-  $("meta").textContent = "در حال خواندن داده…";
+  $("login").hidden = true; $("app").hidden = false; $("save").textContent = "در حال خواندن داده…";
   try {
     data = await loadData();
-    const a = await readJson(APPROVALS);
-    approvals = a?.json || {};
-    const total = data.places.flatMap(itemsOf), ok = total.filter(isOk).length;
-    $("meta").textContent = `شاخه‌ی ${branch} · منبع: ${data._from} · ${data.places.length.toLocaleString("fa-IR")} مکان · ${ok.toLocaleString("fa-IR")} از ${total.length.toLocaleString("fa-IR")} مورد تأیید شده`;
-    if (!data.places.length) $("view").innerHTML = `<p class="muted">هنوز داده‌ای از ایجنت‌ها روی این شاخه نیست. پس از رسیدن فایل‌های تحقیق، این‌جا پر می‌شود.</p>`;
-    renderList();
+    approvals = (await readJson(APPROVALS))?.json || {};
+    buildItems();
+    const saved = store.get("gh_pos"), si = items.findIndex(it => it.key && it.key === saved);
+    pos = si >= 0 && visible(items[si]) ? si : Math.max(0, items.findIndex(visible));
+    $("prog").hidden = false; $("save").textContent = "";
+    if (!items.length) { $("view").innerHTML = `<div class="card done"><p class="muted">هنوز داده‌ای از ایجنت‌ها روی این شاخه نیست.</p></div>`; return; }
+    renderProgress(); renderQueue(); renderItem();
   } catch (e) {
     $("app").hidden = true; $("login").hidden = false; $("err").textContent = "خطا: " + e.message;
   }
 }
 
+addEventListener("keydown", e => {
+  if (!data || $("app").hidden) return;
+  const typing = /TEXTAREA|INPUT/.test(document.activeElement?.tagName);
+  if (typing) { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("fixbox")?.querySelector("button").click(); if (e.key === "Escape") document.activeElement.blur(); return; }
+  const k = e.key.toLowerCase();
+  if (k === "a" || k === "ش") decide(true);
+  else if (k === "r" || k === "ق") { e.preventDefault(); openFix(); }
+  else if (e.key === "ArrowLeft") step(1);
+  else if (e.key === "ArrowRight") step(-1);
+});
 $("go").onclick = () => { token = $("token").value.trim(); branch = $("branch").value.trim() || "claude/pipeline";
   store.set("gh_token", token); store.set("gh_branch", branch); start(); };
 $("logout").onclick = () => { store.set("gh_token", null); location.reload(); };
-$("filter").onchange = renderList;
-addEventListener("beforeunload", e => { if (dirty.size) e.preventDefault(); });
+$("listToggle").onclick = () => $("queue").classList.toggle("open");
+addEventListener("beforeunload", e => { if (dirty.size || saving) e.preventDefault(); });
 if (token) start(); else $("login").hidden = false;
 </script>
 </body>
