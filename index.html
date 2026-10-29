@@ -61,6 +61,9 @@ ol.stations button[aria-current="true"] { background: color-mix(in srgb, var(--g
 .ar { font-family: var(--font-ar); color: var(--muted); font-size: 15px; }
 .date { grid-column: 2 / 4; font-size: 12px; color: var(--muted); }
 .disputed .num::after { content: "؟"; }
+.panel { box-sizing: border-box; }
+.panel > * { flex-shrink: 0; min-width: 0; }
+.badge { flex-wrap: wrap; }
 .detail { border-top: 1px solid var(--border); padding-top: 14px; min-height: 60px; }
 .detail .ar { font-size: 20px; color: var(--ink); }
 .status { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; }
@@ -70,9 +73,9 @@ footer { margin-top: auto; font-size: 11px; color: var(--muted); line-height: 1.
 footer a { color: var(--lapis); }
 .toggle { display: none; }
 .mk { display: flex; flex-direction: column; align-items: center; gap: 3px; pointer-events: none; }
-.mk i { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); border: 2px solid var(--sky); }
+.mk i { width: 9px; height: 9px; border-radius: 50%; background: var(--jc, var(--gold)); border: 2px solid var(--sky); }
 .mk b { font: 500 12px var(--font-ui); color: var(--ink); background: color-mix(in srgb, var(--panel) 85%, transparent);
-  border: 1px solid var(--gold); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
+  border: 1px solid var(--jc, var(--gold)); border-radius: 3px; padding: 1px 6px; white-space: nowrap; }
 .lo .mk:not(.key) b { display: none; }
 .maplibregl-popup-content { background: var(--panel); color: var(--ink); font-family: var(--font-ui); direction: rtl; border: 1px solid var(--border); }
 .maplibregl-popup-tip { border-top-color: var(--panel) !important; border-bottom-color: var(--panel) !important; }
@@ -86,6 +89,21 @@ footer a { color: var(--lapis); }
   .panel.collapsed > :not(.head) { display: none; }
   .toggle { display: inline-block; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 4px; font: inherit; font-size: 12px; padding: 2px 8px; cursor: pointer; }
 }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tabs button { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 14px; font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { border-color: var(--jc); color: var(--ink); background: color-mix(in srgb, var(--jc) 22%, transparent); }
+.tabs i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--jc); margin-left: 6px; }
+.detail h3 { margin: 4px 0 6px; font-size: 16px; }
+.detail .meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.detail .disp { font-size: 13px; line-height: 1.8; background: color-mix(in srgb, var(--warn) 12%, transparent); border-radius: 6px; padding: 6px 10px; margin: 8px 0; color: var(--ink); }
+.nar { border-top: 1px dashed var(--border); padding: 10px 0; }
+.nar .src { font-size: 12px; color: var(--gold); }
+.nar .src span { color: var(--muted); }
+.nar .src .vok { color: #8cc59a; } .nar .src .vno { color: var(--warn); }
+.nar .ar { display: block; color: var(--ink); font-size: 18px; line-height: 1.9; margin: 4px 0; }
+.nar .fa { font-size: 13px; line-height: 1.8; color: var(--ink); opacity: .9; }
+.sw-blue { height: 3px; background: var(--lapis); }
+.sw-red { height: 0; border-top: 3px dashed var(--warn); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -93,68 +111,60 @@ footer a { color: var(--lapis); }
 
 <aside class="panel" id="panel">
   <div class="head" style="display:flex;justify-content:space-between;align-items:start;gap:8px">
-    <h1>اطلس اماکن تاریخ اسلام<small><a href="admin/" style="color:var(--lapis)">پنل تأیید رهبر</a> · نسخه‌ی پیش‌نمایش · پایلوت: مسیر امام حسین (ع)، ۶۰–۶۱ق</small></h1>
+    <h1>اطلس اماکن تاریخ اسلام<small>نسخه‌ی پیش‌نمایش · پایلوت: مسیر امام حسین (ع)، ۶۰–۶۱ق</small></h1>
     <button class="toggle" id="toggle" aria-expanded="true">جمع کردن</button>
   </div>
 
-  <div><span class="badge">پیش‌نویس · داده‌ی مسیر هنوز راستی‌آزمایی نشده</span></div>
+  <div><span class="badge">پیش‌نویس · داده‌ی ادغام‌شده‌ی پایلوت: ۲۹۴ از ۳۰۲ روایت راستی‌آزمایی ماشینی شده؛ تأیید رهبر هنوز نه</span></div>
 
   <section>
-    <h2>منازل مسیر</h2>
-    <ol class="stations" id="stations"></ol>
+    <h2>سفرها</h2>
+    <div class="tabs" id="tabs"></div>
+    <ol class="stations" id="stations" style="margin-top:10px"></ol>
   </section>
 
   <section class="detail" id="detail" aria-live="polite">
-    <p>روی یک منزل یا یک نقطه‌ی روی نقشه بزنید.</p>
+    <p>یک سفر و سپس یک منزل را انتخاب کنید تا خلاصه، اختلاف منابع و روایت‌ها (عربی و ترجمه) را ببینید.</p>
   </section>
 
   <section>
     <h2>راهنما</h2>
     <div class="legend">
-      <div><span class="sw-route"></span>مسیر کاروان روی راه‌های الثریا (کوتاه‌ترین راه بین منازل؛ فرضی)</div>
-      <div><span class="sw-dash"></span>مسیر مورد اختلاف (اسرا به شام، بازگشت)</div>
-      <div><span class="sw-road"></span>راه‌های کهن جهان اسلام</div>
-      <div><span class="sw-dot"></span>اماکن تاریخی (۲۱۸۶ مکان)</div>
+      <div><span class="sw-route"></span>سفر امام حسین (ع)، مدینه تا کربلا</div>
+      <div><span class="sw-blue"></span>سفر مسلم بن عقیل، مکه تا کوفه</div>
+      <div><span class="sw-red"></span>مسیر کاروان اسیران، کوفه تا شام و مدینه (مسیر دقیق مورد اختلاف)</div>
+      <div><span class="sw-dot"></span>رویدادهای بیرون از خط سفرها (مثلاً روایت‌های مدفن سر)</div>
+      <div><span class="sw-road"></span>راه‌های کهن جهان اسلام (الثریا)</div>
+      <div><span class="sw-dot"></span>اماکن تاریخی (۲۱۸۶ مکان، الثریا)</div>
     </div>
+    <p style="font-size:12px;margin-top:8px">خط هر سفر فعلاً مستقیم میان منزل‌هاست. نشاندن آن روی راه‌های کهن و اصلاح مختصات در کار ۸ انجام می‌شود.</p>
   </section>
 
   <section>
     <h2>وضعیت پروژه</h2>
     <div class="status">
-      <span>پرپوزال، اسکیما، قانون منبع‌دهی</span><b class="ok">انجام شد</b>
-      <span>پایگاه جغرافیایی الثریا و ابزار تطبیق</span><b class="ok">انجام شد</b>
-      <span>اسکریپت اعتبارسنجی داده</span><b class="run">نوشته شد، در انتظار بازبینی</b>
-      <span>تحقیق تاریخی سه برش مسیر</span><b class="todo">در صف اجرای ابری</b>
-      <span>راستی‌آزمایی روایت‌ها</span><b class="todo">در صف</b>
+      <span>تحقیق سه برش مسیر (۳۰۲ روایت درجه‌ی ۱)</span><b class="ok">انجام شد</b>
+      <span>اعتبارسنجی و ادغام</span><b class="ok">انجام شد</b>
+      <span>راستی‌آزمایی ماشینی روایت‌ها (کار ۷)</span><b class="ok">۲۹۴ از ۳۰۲</b>
+      <span>جغرافیا و مسیر روی راه‌ها (کار ۸)</span><b class="todo">در صف</b>
+      <span>تأیید رهبر در پنل</span><b class="run">باز</b>
       <span>نسخه‌ی کامل سایت با نوار زمان</span><b class="todo">در صف</b>
     </div>
   </section>
 
   <footer>
     داده‌ی اماکن و راه‌ها: <a href="https://althurayya.github.io/" target="_blank" rel="noopener">al-Thurayya Gazetteer</a> (Romanov &amp; Seydi، بر پایه‌ی اطلس Cornu)، مجوز CC BY 4.0؛ برای این صفحه فشرده شده است.
-    مختصات منازل در این پیش‌نمایش از همین پایگاه است و برخی منازل (زرود، شراف، ذوحسم، قصر بنی مقاتل…) هنوز اضافه نشده‌اند.
+    منازل و روایت‌ها: داده‌ی ادغام‌شده‌ی پایلوت از متن‌های OpenITI (طبری، ارشاد، اللهوف، یاقوت و…)، با نقل عربی و ترجمه‌ی فارسی.
   </footer>
 </aside>
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script>
-// Draft station list. Coordinates are al-Thurayya entries; dates/notes are commonly reported and awaiting verification.
-const STATIONS = [
-  { fa: "مدینه", ar: "المدينة", lon: 39.609, lat: 24.478, date: "خروج: ۲۸ رجب ۶۰ق", note: "آغاز سفر پس از امتناع از بیعت با یزید.", key: true },
-  { fa: "مکه", ar: "مكة", lon: 39.836, lat: 21.391, key: true, date: "اقامت: شعبان تا ۸ ذی‌الحجه ۶۰ق", note: "دریافت نامه‌های کوفیان و اعزام مسلم بن عقیل." },
-  { fa: "تنعیم", ar: "التنعيم", lon: 39.792, lat: 21.539, date: "ذی‌الحجه ۶۰ق", note: "نخستین منزل پس از مکه." },
-  { fa: "ذات عرق", ar: "ذات عرق", lon: 40.429, lat: 21.627, date: "ذی‌الحجه ۶۰ق", note: "میقات اهل عراق." },
-  { fa: "حاجر (بطن الرمه)", ar: "الحاجر", lon: 41.751, lat: 25.969, date: "ذی‌الحجه ۶۰ق", note: "اعزام قیس بن مسهر صیداوی به کوفه." },
-  { fa: "ثعلبیه", ar: "الثعلبية", lon: 43.165, lat: 28.295, date: "ذی‌الحجه ۶۰ق", note: "از منازل راه حج کوفه (درب زبیده)." },
-  { fa: "زباله", ar: "زبالة", lon: 43.564, lat: 29.405, date: "ذی‌الحجه ۶۰ق", note: "رسیدن خبر شهادت مسلم بن عقیل و هانی بن عروه." },
-  { fa: "بطن عقبه", ar: "العقبة", lon: 43.615, lat: 30.091, date: "ذی‌الحجه ۶۰ق", note: "از منازل پیش از برخورد با سپاه حر." },
-  { fa: "حوالی عذیب و قادسیه", ar: "القادسية", lon: 44.187, lat: 31.653, date: "اواخر ذی‌الحجه ۶۰ق", note: "مختصات تقریبی (قادسیه)؛ منزل عذیب الهجانات نزدیک آن است.", approx: true },
-  { fa: "کربلا", ar: "كربلاء", lon: 44.037, lat: 32.618, key: true, date: "ورود: ۲ محرم ۶۱ق · عاشورا: ۱۰ محرم", note: "محل واقعه‌ی عاشورا و مزار امام حسین (ع)." },
-  { fa: "کوفه", ar: "الكوفة", lon: 44.394, lat: 32.038, date: "محرم ۶۱ق", note: "بردن اسرا به دارالاماره‌ی ابن زیاد.", disputed: false },
-  { fa: "دمشق", ar: "دمشق", lon: 36.302, lat: 33.518, date: "صفر ۶۱ق", note: "مسیر کوفه تا شام در منابع مورد اختلاف است؛ اینجا خط‌چین است.", disputed: true, key: true },
-  { fa: "مدینه (بازگشت)", ar: "المدينة", lon: 39.609, lat: 24.478, date: "۶۱ق", note: "زمان و مسیر بازگشت، و عبور از کربلا در اربعین، مورد اختلاف است.", disputed: true },
-];
+// Journeys come from stations.json (built from data/pilot/merged.json by scripts/build_quickwin.py).
+const JCOLOR = { other: "--dot", "husayn-journey-60-61": "--gold", "muslim-journey-60": "--lapis", "captives-journey-61": "--warn" };
+const DASHED = new Set(["captives-journey-61"]);
+const NOLINE = "other"; // events off every journey: markers only, no line
 const BOUNDS = { w: -18, e: 80, s: 5, n: 50 };
 
 const map = new maplibregl.Map({
@@ -183,8 +193,9 @@ map.on("moveend", () => {
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 map.on("load", async () => {
-  const [topo, places, routes, legs] = await Promise.all(
-    ["countries-110m.json", "places.json", "routes.json", "journey.json"].map(u => fetch(u).then(r => r.json())));
+  const [topo, places, routes] = await Promise.all(
+    ["countries-110m.json", "places.json", "routes.json"].map(u => fetch(u).then(r => r.json())));
+  await journeysReady;
 
   map.addSource("land", { type: "geojson", data: topojson.feature(topo, topo.objects.countries) });
   map.addLayer({ id: "land", type: "fill", source: "land", paint: { "fill-color": css("--land") } });
@@ -204,26 +215,34 @@ map.on("load", async () => {
       ["match", ["get", "t"], ["metropoles", "capitals"], 2.6, 1.3], 8,
       ["match", ["get", "t"], ["metropoles", "capitals"], 6, 3.5]] } });
 
-  // Undisputed legs follow al-Thurayya roads (built by scripts/build_quickwin.py); disputed ones stay straight.
-  const main = legs.flatMap((leg, i) => i ? leg.slice(1) : leg);
-  const last = STATIONS.filter(s => !s.disputed).at(-1);
-  const tail = [[last.lon, last.lat], ...STATIONS.filter(s => s.disputed).map(s => [s.lon, s.lat])];
-  map.addSource("journey", { type: "geojson", data: { type: "FeatureCollection", features: [
-    { type: "Feature", properties: { d: 0 }, geometry: { type: "LineString", coordinates: main } },
-    { type: "Feature", properties: { d: 1 }, geometry: { type: "LineString", coordinates: tail } } ] } });
-  map.addLayer({ id: "journey", type: "line", source: "journey", filter: ["==", ["get", "d"], 0],
-    layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": css("--gold"), "line-width": 3 } });
-  map.addLayer({ id: "journey-dash", type: "line", source: "journey", filter: ["==", ["get", "d"], 1],
-    paint: { "line-color": css("--gold"), "line-width": 2.5, "line-dasharray": [2, 2] } });
-
-  STATIONS.forEach((s, i) => {
-    if (i === STATIONS.length - 1) return; // return to Medina shares Medina's marker
-    const el = document.createElement("div");
-    el.className = "mk" + (s.key ? " key" : "");
-    el.innerHTML = "<b></b><i></i>"; el.firstChild.textContent = s.fa;
-    new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([s.lon, s.lat]).addTo(map);
+  // One straight line per journey through its stations' first located place (consecutive repeats dropped).
+  const feats = journeys.filter(j => j.id !== NOLINE).map(j => {
+    const pts = [];
+    for (const st of j.stations) { const p = st.places.find(p => p.lon != null);
+      if (p && (!pts.length || pts.at(-1)[0] !== p.lon || pts.at(-1)[1] !== p.lat)) pts.push([p.lon, p.lat]); }
+    return { type: "Feature", properties: { c: css(JCOLOR[j.id] || "--gold"), d: DASHED.has(j.id) ? 1 : 0 },
+      geometry: { type: "LineString", coordinates: pts } };
   });
-  // Only key stations are labeled until the reader zooms in.
+  map.addSource("journey", { type: "geojson", data: { type: "FeatureCollection", features: feats } });
+  map.addLayer({ id: "journey", type: "line", source: "journey", filter: ["==", ["get", "d"], 0],
+    layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "c"], "line-width": 3 } });
+  map.addLayer({ id: "journey-dash", type: "line", source: "journey", filter: ["==", ["get", "d"], 1],
+    paint: { "line-color": ["get", "c"], "line-width": 2.5, "line-dasharray": [2, 2] } });
+
+  // One marker per distinct located place; key cities stay labelled when zoomed out.
+  // Places sharing coordinates get one marker, named after the key city among them if any.
+  const KEY = new Set(["medina", "mecca", "karbala", "kufa", "damascus"]), at = new Map();
+  for (const j of journeys) for (const st of j.stations) {
+    const p = st.places.find(p => p.lon != null), k = p && p.lon + "," + p.lat;
+    if (p && (!at.has(k) || (KEY.has(p.id) && !KEY.has(at.get(k).p.id)))) at.set(k, { p, j: at.get(k)?.j || j });
+  }
+  for (const { p, j } of at.values()) {
+    const el = document.createElement("div");
+    el.className = "mk" + (KEY.has(p.id) ? " key" : "");
+    el.style.setProperty("--jc", css(JCOLOR[j.id] || "--gold"));
+    el.innerHTML = "<b></b><i></i>"; el.firstChild.textContent = p.fa;
+    new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat([p.lon, p.lat]).addTo(map);
+  }
   const syncLabels = () => document.body.classList.toggle("lo", map.getZoom() < 5.2);
   map.on("zoom", syncLabels); syncLabels();
 
@@ -241,24 +260,53 @@ map.on("load", async () => {
 
 const list = document.getElementById("stations");
 const detail = document.getElementById("detail");
+const tabs = document.getElementById("tabs");
 const faNum = n => n.toLocaleString("fa-IR");
-STATIONS.forEach((s, i) => {
-  const li = document.createElement("li");
-  const b = document.createElement("button");
-  if (s.disputed) li.className = "disputed";
-  b.innerHTML = `<span class="num">${faNum(i + 1)}</span><span></span><span class="ar"></span><span class="date"></span>`;
-  b.children[1].textContent = s.fa; b.children[2].textContent = s.ar; b.children[3].textContent = s.date;
-  b.addEventListener("click", () => {
-    list.querySelectorAll("button").forEach(x => x.removeAttribute("aria-current"));
-    b.setAttribute("aria-current", "true");
-    detail.innerHTML = `<div class="ar"></div><h2 style="margin-top:6px"></h2><p></p>`;
-    detail.children[0].textContent = s.ar;
-    detail.children[1].textContent = `${s.fa} · ${s.date}`;
-    detail.children[2].textContent = s.note + (s.approx ? " (مختصات تقریبی)" : "") + (s.disputed ? " (مورد اختلاف)" : "");
-    map.flyTo({ center: [s.lon, s.lat], zoom: 6, speed: 0.8 });
+const PERSP = { shia: "شیعی", sunni: "اهل‌سنت", other: "دیگر" };
+const node = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+let journeys = [];
+const journeysReady = fetch("stations.json").then(r => r.json()).then(j => { journeys = j; renderTabs(); showJourney(0); });
+
+function renderTabs() {
+  journeys.forEach((j, i) => {
+    const b = node("button");
+    b.style.setProperty("--jc", css(JCOLOR[j.id] || "--gold"));
+    b.append(node("i"), document.createTextNode(j.title.split("(")[0].trim() + ` (${faNum(j.stations.length)} منزل)`));
+    b.onclick = () => showJourney(i);
+    tabs.append(b);
   });
-  li.appendChild(b); list.appendChild(li);
-});
+}
+function showJourney(i) {
+  tabs.querySelectorAll("button").forEach((b, k) => b.setAttribute("aria-pressed", String(k === i)));
+  list.innerHTML = "";
+  journeys[i].stations.forEach((st, k) => {
+    const li = node("li"), b = node("button");
+    const where = st.places.map(p => p.fa).join("، ") || "بی‌مکان";
+    b.append(node("span", "num", faNum(k + 1)), node("span", null, st.title), node("span", "ar", ""), node("span", "date", `${where}، ${st.date}`));
+    b.onclick = () => { list.querySelectorAll("button").forEach(x => x.removeAttribute("aria-current")); b.setAttribute("aria-current", "true"); showStation(st); };
+    li.append(b); list.append(li);
+  });
+}
+function showStation(st) {
+  detail.innerHTML = "";
+  const p = st.places.find(p => p.lon != null);
+  if (p?.ar) detail.append(node("div", "ar", p.ar));
+  detail.append(node("h3", null, st.title));
+  detail.append(node("div", "meta", [st.places.map(p => p.fa).join("، "), st.date, `${faNum(st.narr.length)} روایت`].filter(Boolean).join("، ")));
+  if (st.summary) detail.append(node("p", null, st.summary));
+  if (st.disputes) detail.append(node("div", "disp", "اختلاف منابع: " + st.disputes));
+  for (const n of st.narr) {
+    const d = node("div", "nar"), src = node("div", "src", n.src);
+    src.append(node("span", null, `، ${n.loc.split("(")[0].trim()}، منبع ${PERSP[n.persp] || n.persp}`));
+    src.append(node("span", n.v ? "vok" : "vno", n.v ? "، ✓ نقل در متن منبع یافت شد" : "، هنوز راستی‌آزمایی نشده"));
+    d.append(src);
+    if (n.ar) d.append(node("span", "ar", n.ar));
+    if (n.fa) d.append(node("div", "fa", n.fa));
+    detail.append(d);
+  }
+  detail.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (p) map.flyTo({ center: [p.lon, p.lat], zoom: 6, speed: 0.8 });
+}
 
 const panel = document.getElementById("panel"), toggle = document.getElementById("toggle");
 toggle.addEventListener("click", () => {

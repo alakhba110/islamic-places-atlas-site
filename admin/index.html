@@ -89,7 +89,7 @@ h2 { margin: 0 0 8px; font-size: 21px; line-height: 1.5; }
     <div class="bar"><i class="ok" id="bOk"></i><i class="fix" id="bFix"></i></div>
     <div class="legend"><span><span class="dot ok"></span><b id="nOk"></b> تأیید</span><span><span class="dot fix"></span><b id="nFix"></b> نیاز به اصلاح</span><span><span class="dot wait"></span><b id="nWait"></b> منتظر</span><span class="muted" id="meta"></span></div>
     <div class="filters">
-      <div class="seg" id="fKind"><button data-v="all" aria-pressed="true">همه</button><button data-v="place">موقعیت مکان</button><button data-v="event">رویداد</button><button data-v="narration">روایت</button></div>
+      <div class="seg" id="fKind"><button data-v="all" aria-pressed="true">همه</button><button data-v="question">پرسش</button><button data-v="place">موقعیت مکان</button><button data-v="event">رویداد</button><button data-v="narration">روایت</button></div>
       <div class="seg" id="fState"><button data-v="wait" aria-pressed="true">منتظر</button><button data-v="fix">نیاز به اصلاح</button><button data-v="ok">تأییدشده</button><button data-v="all">همه</button></div>
     </div>
   </div>
@@ -97,7 +97,7 @@ h2 { margin: 0 0 8px; font-size: 21px; line-height: 1.5; }
 
 <section id="login" class="card" hidden>
   <h2>ورود</h2>
-  <p>این صفحه داده‌ای در خود ندارد. داده را مستقیم از مخزن خصوصی با توکن خودتان می‌خواند و فقط فایل <code>data/pilot/review/approvals.json</code> را می‌نویسد.</p>
+  <p>این صفحه داده‌ای در خود ندارد. داده و پرسش‌های باز را مستقیم از مخزن خصوصی با توکن خودتان می‌خواند و فقط فایل <code>data/pilot/review/approvals.json</code> را می‌نویسد (تأییدها و پاسخ پرسش‌ها).</p>
   <p class="muted">یک fine-grained token بسازید (GitHub ← Settings ← Developer settings ← Fine-grained tokens) فقط برای مخزن <code>islamic-places-atlas</code> با دسترسی <b>Contents: Read and write</b>. توکن فقط در مرورگر خودتان ذخیره می‌شود.</p>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <input type="password" id="token" style="flex:1;min-width:220px" placeholder="github_pat_…" autocomplete="off">
@@ -117,14 +117,16 @@ h2 { margin: 0 0 8px; font-size: 21px; line-height: 1.5; }
 const REPO = "alakhba110/islamic-places-atlas";
 const APPROVALS = "data/pilot/review/approvals.json";
 const RES_FA = { point: "نقطه (جای مشخص)", area: "ناحیه (محدوده‌ی کلی)", approximate: "احتمالی (حدود تخمینی)" };
-const KIND_FA = { place: "موقعیت مکان", event: "رویداد", narration: "روایت" };
+const KIND_FA = { question: "پرسش", place: "موقعیت مکان", event: "رویداد", narration: "روایت" };
+const QUESTIONS = "docs/lead/questions.md";
+const latin = s => s.replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d));
 const fa = n => Number(n).toLocaleString("fa-IR");
 const $ = id => document.getElementById(id);
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
 
 let token = store.get("gh_token"), branch = store.get("gh_branch") || "claude/pipeline";
-let data, approvals = {}, items = [], pos = 0, fKind = "all", fState = "wait", map = null;
+let data, questions = [], approvals = {}, items = [], pos = 0, fKind = "all", fState = "wait", map = null;
 let dirty = new Set(), saveTimer = null, saving = false;
 
 async function gh(path, opts = {}) {
@@ -159,11 +161,25 @@ async function loadData() {
   return out;
 }
 
+// Open questions from docs/lead/questions.md: "## <n>. <title>" sections. A section with a "✅" line
+// was already answered (via inbox.md or this panel) and the agent has applied it.
+async function loadQuestions() {
+  const f = await gh(`contents/${QUESTIONS}?${ref()}`);
+  if (!f) return [];
+  const md = decode(f.content || (await gh(`git/blobs/${f.sha}`)).content);
+  return md.split(/^## /m).slice(1).map(sec => {
+    const m = sec.match(/^([0-9۰-۹]+)\.\s*(.+)\n([\s\S]*)$/);
+    if (!m) return null;
+    const body = m[3].replace(/\n---\s*$/, "").trim();
+    return { n: latin(m[1]), title: m[2].trim(), body, done: /^\s*[-*]?\s*✅/m.test(body) };
+  }).filter(Boolean);
+}
+
 // Queue: each place, then the events whose first place it is, each followed by its narrations.
 // Keys: place-location:<id>, event:<id>, narration:<id>. A narration without an id cannot be approved yet:
 // a fallback key would be orphaned once the agent adds ids, and agents may not edit approvals.json.
 function buildItems() {
-  items = [];
+  items = questions.map(q => ({ kind: "question", key: "question:" + q.n, q }));
   const placeOf = ev => (ev.place_ids || [])[0];
   for (const p of data.places) {
     items.push({ kind: "place", key: "place-location:" + p.id, place: p });
@@ -173,9 +189,9 @@ function buildItems() {
     }
   }
 }
-const stateOf = it => { const a = it.key && approvals[it.key]; return a?.approved === true ? "ok" : a?.note ? "fix" : "wait"; };
+const stateOf = it => { const a = it.key && approvals[it.key]; return a?.approved === true ? "ok" : a?.note ? "fix" : it.q?.done ? "ok" : "wait"; };
 const visible = it => (fKind === "all" || it.kind === fKind) && (fState === "all" || stateOf(it) === fState);
-const titleOf = it => it.kind === "place" ? (it.place.name_fa || it.place.id)
+const titleOf = it => it.kind === "question" ? `${fa(it.q.n)}. ${it.q.title}` : it.kind === "place" ? (it.place.name_fa || it.place.id)
   : it.kind === "event" ? (it.ev.title_fa || it.ev.id)
   : `${srcName(it.n)} · ${it.n.locator || ""}`;
 const srcName = n => { const s = data.sources.find(s => s.id === n.source_id); return s?.title_fa || s?.title_ar || n.source_id; };
@@ -192,13 +208,14 @@ function renderProgress() {
 
 function renderQueue() {
   const q = $("queue"); q.innerHTML = "";
-  let lastPlace = null, n = 0;
+  let lastGrp = null, n = 0;
   items.forEach((it, idx) => {
     if (!visible(it)) return;
     n++;
-    if (it.place !== lastPlace) { lastPlace = it.place; q.append(el(`<div class="grp"></div>`, it.place.name_fa || it.place.id)); }
+    const grp = it.kind === "question" ? "پرسش‌های رهبر" : it.place.name_fa || it.place.id;
+    if (grp !== lastGrp) { lastGrp = grp; q.append(el(`<div class="grp"></div>`, grp)); }
     const b = el(`<button class="${it.kind === "narration" ? "ind" : ""}${idx === pos ? " cur" : ""}"><span class="dot ${stateOf(it)}"></span><span></span></button>`);
-    b.lastChild.textContent = (it.kind === "place" ? "موقعیت" : it.kind === "event" ? "◆ " + titleOf(it) : "روایت: " + srcName(it.n).split(/[،(]/)[0].trim());
+    b.lastChild.textContent = it.kind === "question" ? titleOf(it) : (it.kind === "place" ? "موقعیت" : it.kind === "event" ? "◆ " + titleOf(it) : "روایت: " + srcName(it.n).split(/[،(]/)[0].trim());
     b.title = titleOf(it);
     b.onclick = () => { go(idx); $("queue").classList.remove("open"); };
     q.append(b);
@@ -226,6 +243,7 @@ function renderItem() {
     v.append(d); return;
   }
   const c = el(`<div class="card"></div>`);
+  if (it.kind === "question") return renderQuestion(v, c, it);
   const crumbs = [it.place.name_fa || it.place.id]; if (it.kind === "narration") crumbs.push(it.ev.title_fa || it.ev.id);
   c.append(el(`<div class="crumbs"></div>`, it.kind === "place" ? it.place.id : crumbs.join(" › ")), el(`<span class="kind"></span>`, KIND_FA[it.kind]));
 
@@ -281,6 +299,31 @@ function renderItem() {
   bar.append(fb);
   v.append(bar);
   if (it.kind === "place") drawMap(it.place);
+}
+
+// A question: the agent's text and recommendation; "agree" = approved:true, "other answer" = approved:false + note.
+function renderQuestion(v, c, it) {
+  const q = it.q, a = approvals[it.key], st = stateOf(it);
+  c.append(el(`<div class="crumbs"></div>`, "docs/lead/questions.md"), el(`<span class="kind"></span>`, KIND_FA.question));
+  c.append(el("<h2></h2>", `${fa(q.n)}. ${q.title}`));
+  for (const para of q.body.split(/\n+/)) {
+    const t = para.replace(/\*\*/g, "").replace(/`/g, "").trim();
+    if (t) c.append(el(/^پیشنهاد/.test(t) ? `<div class="tr"></div>` : `<p></p>`, t));
+  }
+  if (a) c.append(el(`<div class="state ${st}"></div>`, (a.approved ? "✓ موافق با پیشنهاد" : "✎ پاسخ شما: ") + (a.note && !a.approved ? a.note : a.note ? " — " + a.note : "") + (a.at ? ` (${a.at})` : "")));
+  else if (q.done) c.append(el(`<div class="state ok"></div>`, "✓ پاسخ داده و اعمال شده"));
+  v.append(c);
+  const bar = el(`<div class="actions"></div>`);
+  const ok = el(`<button class="approve">✓ موافق با پیشنهاد<kbd>A</kbd></button>`); ok.onclick = () => decide(true);
+  const fx = el(`<button class="fixbtn">✎ پاسخ دیگر<kbd>R</kbd></button>`); fx.onclick = openFix;
+  const prev = el(`<button>قبلی<kbd>→</kbd></button>`); prev.onclick = () => step(-1);
+  const next = el(`<button>بعدی<kbd>←</kbd></button>`); next.onclick = () => step(1);
+  bar.append(ok, fx, el(`<span class="sp"></span>`), prev, next);
+  const fb = el(`<div id="fixbox"><textarea placeholder="پاسخ یا تصمیم شما؛ ایجنت آن را اعمال و در status.md گزارش می‌کند."></textarea><button class="fixbtn">ثبت پاسخ<kbd>Ctrl+Enter</kbd></button></div>`);
+  fb.querySelector("textarea").value = a && !a.approved ? a.note : "";
+  fb.querySelector("button").onclick = () => { const t = fb.querySelector("textarea").value.trim(); if (t) decide(false, t); };
+  bar.append(fb);
+  v.append(bar);
 }
 
 function openFix() { const f = $("fixbox"); if (!f) return; f.classList.add("open"); f.querySelector("textarea").focus(); }
@@ -368,6 +411,7 @@ async function start() {
   $("login").hidden = true; $("app").hidden = false; $("save").textContent = "در حال خواندن داده…";
   try {
     data = await loadData();
+    questions = await loadQuestions();
     approvals = (await readJson(APPROVALS))?.json || {};
     buildItems();
     const saved = store.get("gh_pos"), si = items.findIndex(it => it.key && it.key === saved);
