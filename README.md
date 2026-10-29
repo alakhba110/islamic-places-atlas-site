@@ -4,3 +4,5 @@ Static pages only; no project data lives here. Source of truth: the private repo
 
 - `/` — globe preview (place and road data: al-Thurayya Gazetteer, CC BY 4.0)
 - `/admin/` — lead approval panel; reads the private repo with the lead's own GitHub token and writes only `data/pilot/review/approvals.json`
+
+Live: https://alakhba110.github.io/islamic-places-atlas-site/ (panel: /admin/)
