@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>پنل تأیید رهبر</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&family=Amiri:wght@400;700&display=swap">
+<style>
+/* Lead approval panel. Reads agent data from the private repo with the lead's own GitHub token
+   and writes only data/pilot/review/approvals.json. The page itself holds no project data. */
+:root {
+  --bg: #f6f3ec; --panel: #fffdf8; --ink: #1f2328; --muted: #6a6f76; --line: #e2ddd2;
+  --gold: #a87a22; --ok: #2f7d4a; --warn: #b4542c; --area: #3d6fb6;
+  --font-ui: "Vazirmatn", Tahoma, system-ui, sans-serif; --font-ar: "Amiri", "Traditional Arabic", serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f141b; --panel: #151c25; --ink: #e9e3d6; --muted: #9aa6b2; --line: #2a3542;
+  --gold: #d9a84e; --ok: #8cc59a; --warn: #e0875a; --area: #5b8fd6; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.7 var(--font-ui); }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 3; }
+h1 { margin: 0; font-size: 18px; }
+h2 { margin: 0 0 6px; font-size: 16px; }
+h3 { margin: 14px 0 6px; font-size: 13px; color: var(--gold); font-weight: 500; }
+button, input, select { font: inherit; }
+button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+button.primary { background: var(--gold); color: #fff; border-color: var(--gold); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=password], input[type=text], select { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 4px 8px; }
+.muted { color: var(--muted); font-size: 12px; }
+main { display: grid; grid-template-columns: 300px 1fr; min-height: calc(100vh - 60px); }
+nav { border-left: 1px solid var(--line); overflow-y: auto; max-height: calc(100vh - 60px); position: sticky; top: 60px; }
+nav button { display: grid; grid-template-columns: 1fr auto; width: 100%; text-align: right; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 8px 12px; background: none; }
+nav button[aria-current="true"] { background: color-mix(in srgb, var(--gold) 15%, transparent); }
+.pill { font-size: 11px; border-radius: 10px; padding: 0 8px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.wait { color: var(--warn); }
+#view { padding: 16px; max-width: 900px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+.row { display: flex; gap: 10px; align-items: flex-start; }
+.row label.chk { display: flex; gap: 6px; align-items: center; white-space: nowrap; font-weight: 500; }
+.row label.chk input { width: 18px; height: 18px; accent-color: var(--ok); }
+.grow { flex: 1; min-width: 0; }
+.ar { font-family: var(--font-ar); font-size: 17px; line-height: 1.9; }
+.kv { display: grid; grid-template-columns: 130px 1fr; gap: 2px 10px; font-size: 13px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; }
+#map { height: 260px; border-radius: 8px; border: 1px solid var(--line); margin-top: 8px; }
+.note { width: 100%; margin-top: 6px; }
+.res-point { color: var(--ok); } .res-area { color: var(--area); } .res-approximate { color: var(--warn); }
+#login { max-width: 560px; margin: 40px auto; }
+@media (max-width: 760px) { main { grid-template-columns: 1fr; } nav { position: static; max-height: 40vh; border-left: 0; border-bottom: 1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>پنل تأیید رهبر</h1><div class="muted" id="meta">اطلس اماکن تاریخ اسلام</div></div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <select id="filter" aria-label="فیلتر">
+      <option value="all">همه‌ی اماکن</option><option value="wait">فقط منتظر تأیید</option><option value="ok">فقط تأییدشده</option>
+    </select>
+    <span class="muted" id="dirty"></span>
+    <button class="primary" id="save" disabled>ذخیره در گیت‌هاب</button>
+    <button id="logout">خروج</button>
+  </div>
+</header>
+
+<section id="login" class="card" hidden>
+  <h2>ورود</h2>
+  <p>این صفحه داده‌ای در خود ندارد. داده را مستقیم از مخزن خصوصی با توکن خودتان می‌خواند و فقط فایل <code>data/pilot/review/approvals.json</code> را می‌نویسد.</p>
+  <p class="muted">یک fine-grained token بسازید (GitHub ← Settings ← Developer settings ← Fine-grained tokens) فقط برای مخزن <code>islamic-places-atlas</code> با دسترسی <b>Contents: Read and write</b>. توکن فقط در مرورگر خودتان ذخیره می‌شود.</p>
+  <div class="row" style="flex-wrap:wrap">
+    <input type="password" id="token" class="grow" placeholder="github_pat_…" autocomplete="off">
+    <input type="text" id="branch" value="claude/pipeline" size="16" aria-label="شاخه">
+    <button class="primary" id="go">ورود</button>
+  </div>
+  <p class="muted" id="err"></p>
+</section>
+
+<main id="app" hidden>
+  <nav id="list"></nav>
+  <div id="view"><p class="muted">یک مکان را انتخاب کنید.</p></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script>
+const REPO = "alakhba110/islamic-places-atlas";
+const APPROVALS = "data/pilot/review/approvals.json";
+const RES_FA = { point: "نقطه (جای مشخص)", area: "ناحیه (محدوده‌ی کلی)", approximate: "احتمالی (حدود تخمینی)" };
+const $ = id => document.getElementById(id);
+const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
+
+let token = store.get("gh_token"), branch = store.get("gh_branch") || "claude/pipeline";
+let data, approvals = {}, approvalsSha = null, dirty = new Set(), current = null, map = null;
+
+async function gh(path, opts = {}) {
+  const r = await fetch(`https://api.github.com/repos/${REPO}/${path}`, { ...opts,
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", ...(opts.headers || {}) } });
+  if (!r.ok && r.status !== 404) throw new Error(`${r.status} ${(await r.json().catch(() => ({}))).message || ""}`);
+  return r.status === 404 ? null : r.json();
+}
+const ref = () => `ref=${encodeURIComponent(branch)}`;
+const decode = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), c => c.charCodeAt(0)));
+const encode = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+async function readJson(path) {
+  const f = await gh(`contents/${path}?${ref()}`);
+  if (!f) return null;
+  // Files over 1 MB come without inline content; fetch them as blobs.
+  const b64 = f.content || (await gh(`git/blobs/${f.sha}`)).content;
+  return { json: JSON.parse(decode(b64)), sha: f.sha };
+}
+
+// Prefer the merged file; before task 6 lands, combine the raw segment files.
+async function loadData() {
+  const merged = await readJson("data/pilot/merged.json");
+  if (merged) return { ...merged.json, _from: "merged.json" };
+  const dir = await gh(`contents/data/pilot/raw?${ref()}`) || [];
+  const out = { places: [], events: [], sources: [], _from: "raw/ (" + dir.filter(f => f.name.endsWith(".json")).length + " فایل)" };
+  const seen = { places: new Set(), sources: new Set(), events: new Set() };
+  for (const f of dir.filter(f => f.name.endsWith(".json"))) {
+    const j = (await readJson(f.path)).json;
+    for (const k of ["places", "events", "sources"])
+      for (const x of j[k] || []) if (!seen[k].has(x.id)) { seen[k].add(x.id); out[k].push({ ...x, _file: f.name }); }
+  }
+  return out;
+}
+
+// Approval keys: place-location:<place id>, event:<event id>, narration:<narration id>
+// (narrations without an id fall back to <event id>#<index>).
+const narrKey = (ev, n, i) => "narration:" + (n.id || `${ev.id}#${i}`);
+function itemsOf(p) {
+  const keys = ["place-location:" + p.id];
+  for (const ev of data.events.filter(e => (e.place_ids || []).includes(p.id))) {
+    keys.push("event:" + ev.id);
+    (ev.narrations || []).forEach((n, i) => keys.push(narrKey(ev, n, i)));
+  }
+  return keys;
+}
+const isOk = k => approvals[k]?.approved === true;
+
+function renderList() {
+  const f = $("filter").value, nav = $("list");
+  nav.innerHTML = "";
+  for (const p of data.places) {
+    const keys = itemsOf(p), done = keys.filter(isOk).length, all = done === keys.length;
+    if ((f === "ok" && !all) || (f === "wait" && all)) continue;
+    const b = document.createElement("button");
+    b.innerHTML = `<span></span><span class="pill ${all ? "ok" : "wait"}">${done.toLocaleString("fa-IR")}/${keys.length.toLocaleString("fa-IR")}</span>`;
+    b.firstChild.textContent = p.name_fa || p.id;
+    if (current === p.id) b.setAttribute("aria-current", "true");
+    b.onclick = () => { current = p.id; renderList(); renderPlace(p); };
+    nav.appendChild(b);
+  }
+  if (!nav.children.length) nav.innerHTML = `<p class="muted" style="padding:12px">موردی نیست.</p>`;
+}
+
+function approvalRow(key, label) {
+  const a = approvals[key] || {};
+  const row = document.createElement("div");
+  row.innerHTML = `<label class="chk"><input type="checkbox"> <span></span></label>
+    <input type="text" class="note" placeholder="یادداشت یا اصلاح برای ایجنت (اختیاری)">`;
+  const [box, note] = row.querySelectorAll("input");
+  row.querySelector("span").textContent = label;
+  box.checked = a.approved === true; note.value = a.note || "";
+  const upd = () => {
+    approvals[key] = { approved: box.checked, note: note.value.trim(), by: "lead", at: new Date().toISOString().slice(0, 10) };
+    dirty.add(key); syncDirty(); renderList();
+  };
+  box.onchange = upd; note.onchange = upd;
+  return row;
+}
+
+function el(html, text) { const d = document.createElement("div"); d.innerHTML = html; if (text != null) d.firstElementChild.textContent = text; return d.firstElementChild; }
+
+function renderPlace(p) {
+  const v = $("view"); v.innerHTML = "";
+  const res = p.resolution || "point";
+  const head = el(`<div class="card"></div>`);
+  head.innerHTML = `<h2></h2><div class="ar"></div><dl class="kv"></dl><div id="map"></div><h3>تأیید موقعیت</h3>`;
+  head.querySelector("h2").textContent = `${p.name_fa || ""} · ${p.id}`;
+  head.querySelector(".ar").textContent = p.name_ar || "";
+  const kv = head.querySelector("dl");
+  const add = (k, val, cls) => { if (val == null || val === "") return; kv.append(el("<dt></dt>", k), el(`<dd class="${cls || ""}"></dd>`, String(val))); };
+  add("رزولوشن", RES_FA[res] || res + (p.resolution ? "" : " (تعیین نشده)"), "res-" + res);
+  add("مختصات", p.coords ? `${p.coords.lat}, ${p.coords.lon}` : "ندارد");
+  if (p.area) add("محدوده", p.area.radius_km ? `دایره به شعاع ${p.area.radius_km} کیلومتر` : "چندضلعی");
+  add("اطمینان", p.coord_certainty); add("مبنا", p.coord_basis);
+  add("نام امروزی", p.name_modern); add("وضعیت امروز", p.present_status);
+  (p.alt_locations || []).forEach((a, i) => add(`جای جایگزین ${i + 1}`, `${a.lat}, ${a.lon} — ${a.note || ""}`));
+  add("فایل", p._file);
+  head.appendChild(approvalRow("place-location:" + p.id, "موقعیت و رزولوشن این مکان را تأیید می‌کنم"));
+  v.appendChild(head);
+  drawMap(p);
+
+  const evs = data.events.filter(e => (e.place_ids || []).includes(p.id));
+  if (!evs.length) v.appendChild(el(`<p class="muted"></p>`, "رویدادی به این مکان وصل نشده است."));
+  for (const ev of evs) {
+    const c = el(`<div class="card"></div>`);
+    const d = ev.date_hijri || {};
+    c.append(el("<h2></h2>", ev.title_fa || ev.id),
+      el(`<div class="muted"></div>`, [d.day, d.month, d.year].filter(x => x != null).join("/") + (d.year ? "ق" : "") + (d.approx ? " (تقریبی)" : "") + " · " + (ev.categories || []).join("، ")),
+      el("<p></p>", ev.summary_fa || ""));
+    if (ev.disputes_fa) c.append(el(`<p class="muted"></p>`, "اختلاف‌ها: " + ev.disputes_fa));
+    c.appendChild(approvalRow("event:" + ev.id, "خلاصه‌ی این رویداد را تأیید می‌کنم"));
+    (ev.narrations || []).forEach((n, i) => {
+      const src = data.sources.find(s => s.id === n.source_id);
+      const box = el(`<div style="border-top:1px solid var(--line);margin-top:10px;padding-top:8px"></div>`);
+      const h = el("<h3></h3>", `روایت ${(i + 1).toLocaleString("fa-IR")} · ${src?.title_fa || src?.title_ar || n.source_id} · ${n.locator || ""} · درجه ${n.tier} · ${n.perspective || ""}${n.verified ? " · راستی‌آزمایی شده" : ""}`);
+      box.append(h);
+      if (n.text_ar) box.append(el(`<div class="ar"></div>`, n.text_ar));
+      if (n.translation_fa) box.append(el("<p></p>", n.translation_fa));
+      if (n.url) { const a = el(`<a target="_blank" rel="noopener"></a>`, n.url); a.href = n.url; box.append(a); }
+      box.appendChild(approvalRow(narrKey(ev, n, i), "این روایت و ترجمه‌اش را تأیید می‌کنم"));
+      c.appendChild(box);
+    });
+    v.appendChild(c);
+  }
+}
+
+// Point = dot; area = circle (radius_km) or polygon; approximate = dot with its uncertainty radius.
+function circle([lon, lat], km) {
+  const pts = [];
+  for (let i = 0; i <= 64; i++) { const t = i / 64 * 2 * Math.PI;
+    pts.push([lon + km / (111.32 * Math.cos(lat * Math.PI / 180)) * Math.cos(t), lat + km / 110.57 * Math.sin(t)]); }
+  return { type: "Polygon", coordinates: [pts] };
+}
+function drawMap(p) {
+  if (map) { map.remove(); map = null; }
+  if (!p.coords || !window.maplibregl) return;
+  const c = [p.coords.lon, p.coords.lat], feats = [];
+  if (p.area?.polygon) feats.push({ type: "Feature", geometry: { type: "Polygon", coordinates: [p.area.polygon] } });
+  const r = p.area?.radius_km || p.uncertainty_radius_km;
+  if (r) feats.push({ type: "Feature", geometry: circle(c, r) });
+  feats.push({ type: "Feature", geometry: { type: "Point", coordinates: c } });
+  map = new maplibregl.Map({ container: "map", center: c, zoom: r ? Math.max(4, 12 - Math.log2(r * 2)) : 13, attributionControl: { compact: true },
+    style: { version: 8, sources: { osm: { type: "raster", tileSize: 256, attribution: "© OpenStreetMap",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"] } }, layers: [{ id: "osm", type: "raster", source: "osm" }] } });
+  map.on("load", () => {
+    map.addSource("p", { type: "geojson", data: { type: "FeatureCollection", features: feats } });
+    map.addLayer({ id: "fill", type: "fill", source: "p", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#3d6fb6", "fill-opacity": 0.2 } });
+    map.addLayer({ id: "edge", type: "line", source: "p", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#3d6fb6", "line-width": 2, "line-dasharray": [2, 1] } });
+    map.addLayer({ id: "dot", type: "circle", source: "p", filter: ["==", "$type", "Point"], paint: { "circle-radius": 6, "circle-color": "#a87a22", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } });
+  });
+}
+
+function syncDirty() {
+  $("dirty").textContent = dirty.size ? `${dirty.size.toLocaleString("fa-IR")} تغییر ذخیره‌نشده` : "";
+  $("save").disabled = !dirty.size;
+}
+
+$("save").onclick = async () => {
+  $("save").disabled = true; $("dirty").textContent = "در حال ذخیره…";
+  try {
+    // Re-read first so agents' or another tab's edits to approvals.json are not overwritten.
+    const latest = await readJson(APPROVALS);
+    const merged = { ...(latest?.json || {}) };
+    for (const k of dirty) merged[k] = approvals[k];
+    const body = { message: `Lead approvals: ${dirty.size} item(s) updated via admin panel`, branch,
+      content: encode(JSON.stringify(merged, null, 2) + "\n") };
+    if (latest) body.sha = latest.sha;
+    await gh(`contents/${APPROVALS}`, { method: "PUT", body: JSON.stringify(body) });
+    approvals = merged; dirty.clear(); syncDirty(); $("dirty").textContent = "ذخیره شد ✓";
+  } catch (e) { $("dirty").textContent = "خطا در ذخیره: " + e.message; $("save").disabled = false; }
+};
+
+async function start() {
+  $("login").hidden = true; $("app").hidden = false;
+  $("meta").textContent = "در حال خواندن داده…";
+  try {
+    data = await loadData();
+    const a = await readJson(APPROVALS);
+    approvals = a?.json || {};
+    const total = data.places.flatMap(itemsOf), ok = total.filter(isOk).length;
+    $("meta").textContent = `شاخه‌ی ${branch} · منبع: ${data._from} · ${data.places.length.toLocaleString("fa-IR")} مکان · ${ok.toLocaleString("fa-IR")} از ${total.length.toLocaleString("fa-IR")} مورد تأیید شده`;
+    if (!data.places.length) $("view").innerHTML = `<p class="muted">هنوز داده‌ای از ایجنت‌ها روی این شاخه نیست. پس از رسیدن فایل‌های تحقیق، این‌جا پر می‌شود.</p>`;
+    renderList();
+  } catch (e) {
+    $("app").hidden = true; $("login").hidden = false; $("err").textContent = "خطا: " + e.message;
+  }
+}
+
+$("go").onclick = () => { token = $("token").value.trim(); branch = $("branch").value.trim() || "claude/pipeline";
+  store.set("gh_token", token); store.set("gh_branch", branch); start(); };
+$("logout").onclick = () => { store.set("gh_token", null); location.reload(); };
+$("filter").onchange = renderList;
+addEventListener("beforeunload", e => { if (dirty.size) e.preventDefault(); });
+if (token) start(); else $("login").hidden = false;
+</script>
+</body>
+</html>
